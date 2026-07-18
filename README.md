@@ -7,10 +7,8 @@ Aplicação back-end em Java/Spring Boot para gerenciar pautas, sessões de vota
 - Java 17.
 - Maven Wrapper do projeto.
 - PostgreSQL para execução local/produtiva.
-- Kafka opcional, habilitado por perfil/propriedade.
+- Kafka opcional.
 - OpenFeign para integração HTTP com a API externa de CPF/CNPJ.
-
-
 
 ## Configuração
 
@@ -26,16 +24,13 @@ CPF_CNPJ_TOKEN=5ae973d7a997af13f0aaf2bf60e65803
 CPF_CNPJ_CODIGO_CPF=9
 CPF_CNPJ_CODIGO_CNPJ=6
 
-
 VOTACAO_FINALIZACAO_HABILITADA=true
 VOTACAO_FINALIZACAO_CRON=*/10 * * * * *
-VOTACAO_FINALIZACAO_LOTE=100
+VOTACAO_FINALIZACAO_POOL_SIZE=4
 
 VOTACAO_KAFKA_HABILITADO=false
 VOTACAO_KAFKA_TOPICO_RESULTADO=votacao.resultado.encerrado
 KAFKA_BOOTSTRAP_SERVERS=localhost:19092
-
-
 ```
 
 ## Execução
@@ -50,11 +45,27 @@ No Windows:
 mvnw.cmd spring-boot:run
 ```
 
-Para habilitar Kafka:
+## Docker
+
+Subir PostgreSQL local:
 
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=kafka
+docker compose up -d postgres
 ```
+
+Subir Kafka e Kafka UI:
+
+```bash
+docker compose --profile kafka up -d kafka kafka-ui
+```
+
+Acessos locais:
+
+- Aplicação: `http://localhost:8083`
+- Swagger UI: `http://localhost:8083/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8083/v3/api-docs`
+- Kafka UI: `http://localhost:8084`
+- Kafka broker para aplicação fora do Docker: `localhost:19092`
 
 ## Testes
 
@@ -64,163 +75,481 @@ Para habilitar Kafka:
 
 Os testes usam H2 em memória com perfil `test`.
 
-## Swagger/OpenAPI
+## Regras de Estado
 
-Com a aplicação em execução, a documentação interativa fica disponível em:
+- A pauta pode ser criada, consultada, listada, atualizada e removida.
+- A pauta só pode ser atualizada se ainda não possuir voto e se a sessão vinculada ainda não tiver sido disponibilizada.
+- A pauta só pode ser removida se não possuir votos nem sessão vinculada.
+- A sessão nasce como `CRIADA`; nesse estado não recebe votos e pode ser atualizada ou removida.
+- A sessão passa para `DISPONIVEL` em `POST /api/v1/sessoes/{sessaoId}/disponibilizar`.
+- Depois de `DISPONIVEL`, a sessão não volta para `CRIADA` e não pode mais ser alterada/removida.
+- Voto é único por pauta e documento; não existe atualização, remoção ou novo voto para o mesmo documento na mesma pauta.
+- Sessão `DISPONIVEL` vencida é encerrada pelo cron job ou manualmente pelo endpoint de finalização.
+- Sessão encerrada publica o resultado sintetizado no Kafka quando `VOTACAO_KAFKA_HABILITADO=true`.
 
-```text
-http://localhost:8083/swagger-ui.html
-```
+## Formato de Erro
 
-O contrato OpenAPI em JSON fica disponível em:
+Exemplo padrão retornado pelo tratamento centralizado de exceções:
 
-```text
-http://localhost:8083/v3/api-docs
-```
-
-E em YAML:
-
-```text
-http://localhost:8083/v3/api-docs.yaml
+```json
+{
+  "timestamp": "2026-07-18T10:30:00",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Pauta não encontrada para o id 1",
+  "path": "/api/v1/pautas/1"
+}
 ```
 
 ## Endpoints
 
-### Regras de estado
-
-- Sessão nasce como `CRIADA`; pode ser atualizada ou removida e ainda não recebe votos.
-- Sessão passa para `DISPONIVEL` em `POST /api/v1/sessoes/{sessaoId}/disponibilizar`.
-- Após `DISPONIVEL`, a sessão não pode mais ser alterada ou removida.
-- Voto é único por pauta e documento; não existe atualização ou remoção de voto.
-- Sessão `DISPONIVEL` é encerrada pelo cron quando vencer ou manualmente por endpoint.
-
-### Criar pauta
+### 1. Criar Pauta
 
 ```http
 POST /api/v1/pautas
 ```
 
+Request:
+
 ```json
 {
   "titulo": "Aprovação de nova política de crédito",
-  "descricao": "Votação sobre a política proposta"
+  "descricao": "Votação sobre a política proposta para o próximo ciclo."
 }
 ```
 
-### Buscar pauta
+Response `201 Created`:
 
-```http
-GET /api/v1/pautas/{pautaId}
+```json
+{
+  "id": 1,
+  "titulo": "Aprovação de nova política de crédito",
+  "descricao": "Votação sobre a política proposta para o próximo ciclo.",
+  "criadaEm": "2026-07-18T10:00:00"
+}
 ```
 
-### Listar pautas
+Possíveis erros:
+
+- `400 Bad Request`: payload inválido.
+
+### 2. Listar Pautas
 
 ```http
 GET /api/v1/pautas
 ```
 
-### Atualizar pauta
+Response `200 OK`:
+
+```json
+[
+  {
+    "id": 1,
+    "titulo": "Aprovação de nova política de crédito",
+    "descricao": "Votação sobre a política proposta para o próximo ciclo.",
+    "criadaEm": "2026-07-18T10:00:00"
+  }
+]
+```
+
+### 3. Buscar Pauta por ID
+
+```http
+GET /api/v1/pautas/{pautaId}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "id": 1,
+  "titulo": "Aprovação de nova política de crédito",
+  "descricao": "Votação sobre a política proposta para o próximo ciclo.",
+  "criadaEm": "2026-07-18T10:00:00"
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: pauta não encontrada.
+
+### 4. Atualizar Pauta
 
 ```http
 PUT /api/v1/pautas/{pautaId}
 ```
 
-Permitido apenas antes de existir voto e antes da sessão vinculada ser disponibilizada.
+Request:
 
-### Deletar pauta
+```json
+{
+  "titulo": "Aprovação revisada de política de crédito",
+  "descricao": "Descrição ajustada antes da votação."
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "id": 1,
+  "titulo": "Aprovação revisada de política de crédito",
+  "descricao": "Descrição ajustada antes da votação.",
+  "criadaEm": "2026-07-18T10:00:00"
+}
+```
+
+Possíveis erros:
+
+- `400 Bad Request`: payload inválido.
+- `404 Not Found`: pauta não encontrada.
+- `409 Conflict`: pauta já possui voto ou sessão disponibilizada.
+
+### 5. Deletar Pauta
 
 ```http
 DELETE /api/v1/pautas/{pautaId}
 ```
 
-Permitido apenas sem votos e sem sessão vinculada.
+Response `204 No Content`.
 
-### Abrir sessão com duração default
+Possíveis erros:
+
+- `404 Not Found`: pauta não encontrada.
+- `409 Conflict`: pauta possui votos ou sessão vinculada.
+
+### 6. Criar Sessão com Duração Default
 
 ```http
 POST /api/v1/pautas/{pautaId}/sessoes
 ```
 
-Cria a sessão como `CRIADA`. Default: `60 segundos`.
+Request opcional:
 
-### Abrir sessão com duração customizada
+```json
+{
+  "duracaoEmSegundos": 120
+}
+```
+
+Se o body não for enviado, a duração default será `60` segundos.
+
+Response `201 Created`:
+
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": null,
+  "status": "CRIADA"
+}
+```
+
+Possíveis erros:
+
+- `400 Bad Request`: payload inválido.
+- `404 Not Found`: pauta não encontrada.
+- `409 Conflict`: pauta já possui sessão.
+
+### 7. Criar Sessão com Duração no Path
 
 ```http
 POST /api/v1/pautas/{pautaId}/sessoes/{duracaoEmSegundos}
 ```
 
-### Listar sessões
+Exemplo:
+
+```http
+POST /api/v1/pautas/1/sessoes/120
+```
+
+Response `201 Created`:
+
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": null,
+  "status": "CRIADA"
+}
+```
+
+Possíveis erros:
+
+- `400 Bad Request`: duração inválida.
+- `404 Not Found`: pauta não encontrada.
+- `409 Conflict`: pauta já possui sessão.
+
+### 8. Listar Sessões
 
 ```http
 GET /api/v1/sessoes
 ```
 
-### Buscar sessão
+Response `200 OK`:
+
+```json
+[
+  {
+    "id": 10,
+    "pautaId": 1,
+    "abertaEm": "2026-07-18T10:00:00",
+    "fechaEm": "2026-07-18T10:02:00",
+    "encerradaEm": null,
+    "status": "CRIADA"
+  }
+]
+```
+
+### 9. Buscar Sessão por ID
 
 ```http
 GET /api/v1/sessoes/{sessaoId}
 ```
 
-### Atualizar sessão
+Response `200 OK`:
+
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": null,
+  "status": "CRIADA"
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: sessão não encontrada.
+
+### 10. Atualizar Sessão
 
 ```http
 PUT /api/v1/sessoes/{sessaoId}
 ```
 
-Permitido apenas enquanto a sessão estiver `CRIADA`.
+Request:
 
-### Deletar sessão
+```json
+{
+  "duracaoEmSegundos": 180
+}
+```
+
+Response `200 OK`:
+
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:03:00",
+  "encerradaEm": null,
+  "status": "CRIADA"
+}
+```
+
+Possíveis erros:
+
+- `400 Bad Request`: payload inválido.
+- `404 Not Found`: sessão não encontrada.
+- `409 Conflict`: sessão não pode mais ser alterada.
+
+### 11. Deletar Sessão
 
 ```http
 DELETE /api/v1/sessoes/{sessaoId}
 ```
 
-Permitido apenas enquanto a sessão estiver `CRIADA`.
+Response `204 No Content`.
 
-### Disponibilizar sessão para votação
+Possíveis erros:
+
+- `404 Not Found`: sessão não encontrada.
+- `409 Conflict`: sessão não pode mais ser removida.
+
+### 12. Disponibilizar Sessão para Votação
 
 ```http
 POST /api/v1/sessoes/{sessaoId}/disponibilizar
 ```
 
-Depois desta transição a sessão não volta para `CRIADA` e passa a aceitar votos até `fechaEm`.
+Response `200 OK`:
 
-### Forçar encerramento de sessão
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": null,
+  "status": "DISPONIVEL"
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: sessão não encontrada.
+- `409 Conflict`: sessão não está em estado `CRIADA`.
+
+### 13. Forçar Encerramento de Sessão
 
 ```http
 POST /api/v1/sessoes/{sessaoId}/encerrar
 ```
 
-Encerra uma sessão `DISPONIVEL` e publica o resultado no Kafka quando a mensageria estiver habilitada.
+Response `200 OK`:
 
-### Registrar voto
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": "2026-07-18T10:01:30",
+  "status": "PUBLICADA"
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: sessão não encontrada.
+- `422 Unprocessable Entity`: sessão `CRIADA` ainda não pode ser encerrada como votação.
+
+### 14. Registrar Voto
 
 ```http
 POST /api/v1/pautas/{pautaId}/votos
 ```
 
+Request:
+
 ```json
 {
-  "associadoId": 123,
   "tipoDocumento": "CPF",
   "documento": "61500421381",
   "voto": "SIM"
 }
 ```
 
-### Consultar resultado
+Request com CNPJ:
+
+```json
+{
+  "tipoDocumento": "CNPJ",
+  "documento": "11222333000181",
+  "voto": "NAO"
+}
+```
+
+Response `201 Created`:
+
+```json
+{
+  "id": 100,
+  "pautaId": 1,
+  "tipoDocumento": "CPF",
+  "documento": "61500421381",
+  "voto": "SIM",
+  "criadoEm": "2026-07-18T10:01:00"
+}
+```
+
+Possíveis erros:
+
+- `400 Bad Request`: payload inválido.
+- `404 Not Found`: pauta ou sessão não encontrada.
+- `409 Conflict`: documento já votou nesta pauta.
+- `422 Unprocessable Entity`: sessão não disponível, encerrada, CPF/CNPJ inválido ou documento inapto.
+- `503 Service Unavailable`: serviço externo de elegibilidade indisponível.
+
+### 15. Consultar Resultado
 
 ```http
 GET /api/v1/pautas/{pautaId}/resultado
 ```
 
-### Finalizar sessões vencidas manualmente
+Response `200 OK`:
+
+```json
+{
+  "pautaId": 1,
+  "votosSim": 150,
+  "votosNao": 90,
+  "totalVotos": 240,
+  "status": "SESSAO_ENCERRADA",
+  "vencedor": "SIM"
+}
+```
+
+Possíveis valores de `status`:
+
+- `SEM_SESSAO`
+- `SESSAO_ABERTA`
+- `SESSAO_ENCERRADA`
+
+Possíveis valores de `vencedor`:
+
+- `SIM`
+- `NAO`
+- `EMPATE`
+
+Possíveis erros:
+
+- `404 Not Found`: pauta ou sessão não encontrada.
+
+### 16. Finalizar Sessões Vencidas Manualmente
 
 ```http
 POST /api/v1/sessoes/finalizar
 ```
 
-O mesmo caso de uso é executado pelo job agendado quando `VOTACAO_FINALIZACAO_HABILITADA=true`.
+Executa manualmente o mesmo caso de uso do cron job:
+
+- Busca até `10_000` sessões `DISPONIVEL` vencidas.
+- Busca até `10_000` sessões `ENCERRADA` ainda não publicadas.
+- Processa com `VOTACAO_FINALIZACAO_POOL_SIZE`.
+- Publica o resultado no Kafka quando a mensageria estiver habilitada.
+
+Response `200 OK`:
+
+```json
+{
+  "sessoesProcessadas": 2
+}
+```
+
+## Evento Publicado no Kafka
+
+Tópico default:
+
+```text
+votacao.resultado.encerrado
+```
+
+Payload:
+
+```json
+{
+  "id": 1,
+  "titulo": "Aprovação de nova política de crédito",
+  "descricao": "Votação sobre a política proposta para o próximo ciclo.",
+  "pauta": {
+    "pautaId": 1,
+    "votosSim": 150,
+    "votosNao": 90,
+    "totalVotos": 240,
+    "status": "SESSAO_ENCERRADA",
+    "vencedor": "SIM"
+  }
+}
+```
 
 ## Integração CPF/CNPJ
 
@@ -229,15 +558,42 @@ A validação externa usa OpenFeign através do client declarativo `CpfCnpjFeign
 - CPF usa pacote `9`: `https://api.cpfcnpj.com.br/{token}/9/{cpf}`
 - CNPJ usa pacote `6`: `https://api.cpfcnpj.com.br/{token}/6/{cnpj}`
 
-## Regras implementadas
+Exemplo de sucesso:
 
-- Pauta persistida em banco.
-- Uma sessão por pautaEntity.
-- Duração de sessão via path ou default de `60 segundos`.
-- Voto apenas enquanto `status=ABERTA` e `agora < fechaEm`.
-- Um voto por associado por pautaEntity, protegido por validação e constraint única.
-- Resultado por agregação no banco.
-- Job de finalização em lote por `status` e `fechaEm`.
+```json
+{
+  "status": 1,
+  "cpf": "615.004.213-83",
+  "nome": "Test Token",
+  "pacoteUsado": 1,
+  "saldo": 123,
+  "consultaID": "11bb22cc33dd44ee",
+  "delay": 0.3
+}
+```
+
+Exemplo de erro:
+
+```json
+{
+  "status": 0,
+  "cpf": "",
+  "nome": null,
+  "erro": "CPF inválido!",
+  "pacoteUsado": 1,
+  "erroCodigo": 100
+}
+```
+
+## Regras Implementadas
+
+- Pautas, sessões e votos persistidos em PostgreSQL.
+- Uma sessão por pauta.
+- Duração de sessão via body, path ou default de `60` segundos.
+- Voto apenas enquanto a sessão está `DISPONIVEL` e `agora < fechaEm`.
+- Um voto por documento por pauta, protegido por validação e constraint única.
+- Resultado calculado por agregação no banco.
+- Job de finalização com consulta limitada a `10_000` registros e `pool-size` configurável.
 - Publicação Kafka opcional com payload sintetizado.
-- Retentativa de publicação quando Kafka falha.
+- Retentativa de publicação de sessões `ENCERRADA` quando Kafka falha.
 - Tratamento centralizado de erros.
