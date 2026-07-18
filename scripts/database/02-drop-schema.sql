@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS votos;
+DROP TABLE IF EXISTS sessoes_votacao;
+DROP TABLE IF EXISTS pautas;
+

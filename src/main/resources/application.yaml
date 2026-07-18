@@ -1,0 +1,44 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: votacao
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-us-west-2.pooler.supabase.com:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres.nykqbeoolgjobxuyvbcn}
+    password: ${SPRING_DATASOURCE_PASSWORD:Votac@o2026}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  packages-to-scan: com.global.votacao.adapter.in.web
+
+votacao:
+  elegibilidade:
+    habilitada: ${VOTACAO_ELEGIBILIDADE_HABILITADA:false}
+    base-url: ${CPF_CNPJ_BASE_URL:https://api.cpfcnpj.com.br}
+    token: ${CPF_CNPJ_TOKEN:5ae973d7a997af13f0aaf2bf60e65803}
+    codigo-cpf: ${CPF_CNPJ_CODIGO_CPF:9}
+    codigo-cnpj: ${CPF_CNPJ_CODIGO_CNPJ:6}
+  finalizacao:
+    habilitada: ${VOTACAO_FINALIZACAO_HABILITADA:true}
+    cron: ${VOTACAO_FINALIZACAO_CRON:*/10 * * * * *}
+    pool-size: ${VOTACAO_FINALIZACAO_POOL_SIZE:4}
+  kafka:
+    habilitado: ${VOTACAO_KAFKA_HABILITADO:false}
+    topico-resultado: ${VOTACAO_KAFKA_TOPICO_RESULTADO:votacao.resultado.encerrado}
+
