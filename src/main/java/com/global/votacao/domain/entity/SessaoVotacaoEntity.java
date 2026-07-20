@@ -70,9 +70,10 @@ public class SessaoVotacaoEntity {
     }
 
     public void disponibilizar(LocalDateTime abertaEm) {
+        int duracaoEmSegundos = duracaoEmSegundos();
         this.status = StatusSessaoVotacao.DISPONIVEL;
         this.abertaEm = abertaEm;
-        this.fechaEm = abertaEm.plusSeconds(duracaoEmSegundos());
+        this.fechaEm = abertaEm.plusSeconds(duracaoEmSegundos);
     }
 
     public void atualizarDuracao(Integer duracaoEmSegundos) {
