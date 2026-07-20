@@ -29,13 +29,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1")
 @Tag(
         name = "Sessões de votação",
-        description = "CRUD e transições de sessão. Sessão CRIADA é configurável; sessão DISPONIVEL recebe votos e só pode ser encerrada."
+        description = "Fluxo de sessões: 01 Criar, 02 Visualizar, 03 Atualizar, 04 Disponibilizar, 05 Encerrar e 06 Deletar."
 )
 public interface ISessaoVotacaoController {
 
     @Operation(
-            summary = "Criar sessão ainda não disponível",
-            description = "Cria uma sessão para uma pauta existente no status CRIADA. Nesse estado ela ainda não recebe votos e pode ser atualizada/removida."
+            operationId = "01-criar-sessao",
+            summary = "01 - Criar sessão",
+            description = "Cria uma sessão para uma pauta existente no status CRIADA. Nesse estado ela ainda não recebe votos e pode ser atualizada/removida. Se a duração não for informada no body, usa o valor configurado em `votacao.duracao-voto`."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Sessão criada com sucesso", content = @Content(schema = @Schema(implementation = SessaoVotacaoResponse.class))),
@@ -48,7 +49,7 @@ public interface ISessaoVotacaoController {
             @Parameter(description = "Identificador único da pauta.", example = "1", required = true)
             @PathVariable Long pautaId,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    description = "Configuração opcional da sessão. Sem body, usa duração padrão de 60 segundos.",
+                    description = "Configuração opcional da sessão. Sem body, usa a duração padrão configurada em `votacao.duracao-voto`.",
                     content = @Content(
                             schema = @Schema(implementation = CriarSessaoRequest.class),
                             examples = @ExampleObject(value = """
@@ -62,24 +63,10 @@ public interface ISessaoVotacaoController {
     );
 
     @Operation(
-            summary = "Criar sessão com duração pelo path",
-            description = "Cria uma sessão no status CRIADA usando a duração informada diretamente no path."
+            operationId = "02-listar-sessoes",
+            summary = "02 - Visualizar sessões",
+            description = "Retorna todas as sessões cadastradas."
     )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Sessão criada com sucesso", content = @Content(schema = @Schema(implementation = SessaoVotacaoResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Duração inválida", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Pauta não encontrada", content = @Content),
-            @ApiResponse(responseCode = "409", description = "Pauta já possui sessão", content = @Content)
-    })
-    @PostMapping("/pautas/{pautaId}/sessoes/{duracaoEmSegundos}")
-    ResponseEntity<SessaoVotacaoResponse> criarComDuracao(
-            @Parameter(description = "Identificador único da pauta.", example = "1", required = true)
-            @PathVariable Long pautaId,
-            @Parameter(description = "Duração da sessão em segundos.", example = "120", required = true)
-            @PathVariable Integer duracaoEmSegundos
-    );
-
-    @Operation(summary = "Listar sessões", description = "Retorna todas as sessões cadastradas.")
     @ApiResponse(
             responseCode = "200",
             description = "Sessões retornadas com sucesso",
@@ -88,7 +75,11 @@ public interface ISessaoVotacaoController {
     @GetMapping("/sessoes")
     ResponseEntity<List<SessaoVotacaoResponse>> listar();
 
-    @Operation(summary = "Buscar sessão por id", description = "Consulta uma sessão pelo identificador.")
+    @Operation(
+            operationId = "02-buscar-sessao-por-id",
+            summary = "02 - Visualizar sessão por id",
+            description = "Consulta uma sessão pelo identificador da sessão."
+    )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Sessão encontrada", content = @Content(schema = @Schema(implementation = SessaoVotacaoResponse.class))),
             @ApiResponse(responseCode = "404", description = "Sessão não encontrada", content = @Content)
@@ -99,8 +90,10 @@ public interface ISessaoVotacaoController {
             @PathVariable Long sessaoId
     );
 
+
     @Operation(
-            summary = "Atualizar sessão criada",
+            operationId = "03-atualizar-sessao",
+            summary = "03 - Atualizar sessão",
             description = "Atualiza a duração de uma sessão. Só é permitido enquanto a sessão estiver CRIADA e sem votos."
     )
     @ApiResponses({
@@ -129,22 +122,8 @@ public interface ISessaoVotacaoController {
     );
 
     @Operation(
-            summary = "Deletar sessão criada",
-            description = "Remove uma sessão. Só é permitido enquanto a sessão estiver CRIADA e sem votos."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Sessão removida com sucesso", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Sessão não encontrada", content = @Content),
-            @ApiResponse(responseCode = "409", description = "Sessão não pode mais ser removida", content = @Content)
-    })
-    @DeleteMapping("/sessoes/{sessaoId}")
-    ResponseEntity<Void> deletar(
-            @Parameter(description = "Identificador único da sessão.", example = "10", required = true)
-            @PathVariable Long sessaoId
-    );
-
-    @Operation(
-            summary = "Disponibilizar sessão para votação",
+            operationId = "04-disponibilizar-sessao",
+            summary = "04 - Disponibilizar sessão",
             description = "Muda a sessão de CRIADA para DISPONIVEL. Depois dessa transição ela passa a receber votos e não pode mais ser alterada/removida."
     )
     @ApiResponses({
@@ -159,7 +138,8 @@ public interface ISessaoVotacaoController {
     );
 
     @Operation(
-            summary = "Forçar encerramento de sessão",
+            operationId = "05-encerrar-sessao",
+            summary = "05 - Encerrar sessão",
             description = "Encerra manualmente uma sessão DISPONIVEL e publica o resultado no Kafka quando a mensageria estiver habilitada."
     )
     @ApiResponses({
@@ -174,10 +154,27 @@ public interface ISessaoVotacaoController {
     );
 
     @Operation(
-            summary = "Finalizar sessões vencidas",
+            operationId = "05-finalizar-sessoes-vencidas",
+            summary = "05 - Finalizar sessões vencidas",
             description = "Executa manualmente o mesmo fluxo do cron: busca até 10k sessões DISPONIVEL vencidas e até 10k sessões ENCERRADA ainda não publicadas, processando com pool-size configurável, contabilizando e publicando o resultado quando Kafka estiver habilitado."
     )
     @ApiResponse(responseCode = "200", description = "Finalização executada com sucesso", content = @Content(schema = @Schema(implementation = FinalizacaoSessoesResponse.class)))
     @PostMapping("/sessoes/finalizar")
     ResponseEntity<FinalizacaoSessoesResponse> finalizar();
+
+    @Operation(
+            operationId = "06-deletar-sessao",
+            summary = "06 - Deletar sessão",
+            description = "Remove uma sessão. Só é permitido enquanto a sessão estiver CRIADA e sem votos."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Sessão removida com sucesso", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Sessão não encontrada", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Sessão não pode mais ser removida", content = @Content)
+    })
+    @DeleteMapping("/sessoes/{sessaoId}")
+    ResponseEntity<Void> deletar(
+            @Parameter(description = "Identificador único da sessão.", example = "10", required = true)
+            @PathVariable Long sessaoId
+    );
 }

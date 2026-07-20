@@ -21,3 +21,4 @@ votacao:
     pool-size: 4
   kafka:
     habilitado: false
+  duracao-voto: 60

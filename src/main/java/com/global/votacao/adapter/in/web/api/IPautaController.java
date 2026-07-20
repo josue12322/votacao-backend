@@ -3,6 +3,7 @@ package com.global.votacao.adapter.in.web.api;
 import com.global.votacao.application.dto.AtualizarPautaRequest;
 import com.global.votacao.application.dto.CriarPautaRequest;
 import com.global.votacao.application.dto.PautaResponse;
+import com.global.votacao.application.dto.PautaSessaoAbertaResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -28,12 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/pautas")
 @Tag(
         name = "Pautas",
-        description = "CRUD de pautas. Pautas podem ser alteradas antes de existir voto e antes da sessão ser disponibilizada."
+        description = "Fluxo de pautas: 01 Criar, 02 Visualizar, 03 Atualizar e 04 Deletar."
 )
 public interface IPautaController {
 
     @Operation(
-            summary = "Cadastrar nova pauta",
+            operationId = "01-criar-pauta",
+            summary = "01 - Criar pauta",
             description = "Cria uma pauta ainda sem sessão de votação. Depois, uma sessão pode ser criada para essa pauta."
     )
     @ApiResponses({
@@ -59,7 +61,8 @@ public interface IPautaController {
     );
 
     @Operation(
-            summary = "Listar pautas",
+            operationId = "02-listar-pautas",
+            summary = "02 - Visualizar pautas",
             description = "Retorna todas as pautas cadastradas. Não retorna votos nem resultado."
     )
     @ApiResponse(
@@ -71,7 +74,8 @@ public interface IPautaController {
     ResponseEntity<List<PautaResponse>> listar();
 
     @Operation(
-            summary = "Buscar pauta por id",
+            operationId = "02-buscar-pauta-por-id",
+            summary = "02 - Visualizar pauta por id",
             description = "Consulta os dados cadastrais de uma pauta específica."
     )
     @ApiResponses({
@@ -85,7 +89,23 @@ public interface IPautaController {
     );
 
     @Operation(
-            summary = "Atualizar pauta",
+            operationId = "02-buscar-pauta-com-sessao-aberta",
+            summary = "02 - Visualizar pauta com sessão aberta",
+            description = "Consulta uma pauta específica junto com sua sessão aberta. Retorna apenas sessão DISPONIVEL ainda dentro do prazo de votação."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pauta e sessão aberta encontradas", content = @Content(schema = @Schema(implementation = PautaSessaoAbertaResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Pauta não encontrada ou sem sessão aberta", content = @Content)
+    })
+    @GetMapping("/{pautaId}/sessao-aberta")
+    ResponseEntity<PautaSessaoAbertaResponse> buscarComSessaoAberta(
+            @Parameter(description = "Identificador único da pauta.", example = "1", required = true)
+            @PathVariable Long pautaId
+    );
+
+    @Operation(
+            operationId = "03-atualizar-pauta",
+            summary = "03 - Atualizar pauta",
             description = "Atualiza título e descrição da pauta. Só é permitido antes de existir voto e antes da sessão vinculada ser disponibilizada."
     )
     @ApiResponses({
@@ -115,7 +135,8 @@ public interface IPautaController {
     );
 
     @Operation(
-            summary = "Deletar pauta",
+            operationId = "04-deletar-pauta",
+            summary = "04 - Deletar pauta",
             description = "Remove uma pauta. Só é permitido quando não houver votos nem sessão vinculada."
     )
     @ApiResponses({

@@ -81,6 +81,7 @@ Os testes usam H2 em memória com perfil `test`.
 - A pauta só pode ser atualizada se ainda não possuir voto e se a sessão vinculada ainda não tiver sido disponibilizada.
 - A pauta só pode ser removida se não possuir votos nem sessão vinculada.
 - A sessão nasce como `CRIADA`; nesse estado não recebe votos e pode ser atualizada ou removida.
+- Cada pauta pode possuir apenas uma sessão, independente do status (`CRIADA`, `DISPONIVEL`, `ENCERRADA` ou `PUBLICADA`).
 - A sessão passa para `DISPONIVEL` em `POST /api/v1/sessoes/{sessaoId}/disponibilizar`.
 - Depois de `DISPONIVEL`, a sessão não volta para `CRIADA` e não pode mais ser alterada/removida.
 - Voto é único por pauta e documento; não existe atualização, remoção ou novo voto para o mesmo documento na mesma pauta.
@@ -173,7 +174,39 @@ Possíveis erros:
 
 - `404 Not Found`: pauta não encontrada.
 
-### 4. Atualizar Pauta
+### 4. Buscar Pauta com Sessão Aberta
+
+```http
+GET /api/v1/pautas/{pautaId}/sessao-aberta
+```
+
+Retorna a pauta junto com sua sessão aberta, quando existir sessão `DISPONIVEL` ainda dentro do prazo de votação.
+
+Response `200 OK`:
+
+```json
+{
+  "pauta": {
+    "id": 1,
+    "titulo": "Aprovação de nova política de crédito",
+    "descricao": "Votação sobre a política proposta para o próximo ciclo.",
+    "criadaEm": "2026-07-18T10:00:00"
+  },
+  "sessao": {
+    "id": 10,
+    "pautaId": 1,
+    "abertaEm": "2026-07-18T10:00:00",
+    "fechaEm": "2026-07-18T10:02:00",
+    "encerradaEm": null,
+    "status": "DISPONIVEL"
+  }
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: pauta não encontrada ou sem sessão aberta.
+### 5. Atualizar Pauta
 
 ```http
 PUT /api/v1/pautas/{pautaId}
@@ -205,7 +238,7 @@ Possíveis erros:
 - `404 Not Found`: pauta não encontrada.
 - `409 Conflict`: pauta já possui voto ou sessão disponibilizada.
 
-### 5. Deletar Pauta
+### 6. Deletar Pauta
 
 ```http
 DELETE /api/v1/pautas/{pautaId}
@@ -218,7 +251,7 @@ Possíveis erros:
 - `404 Not Found`: pauta não encontrada.
 - `409 Conflict`: pauta possui votos ou sessão vinculada.
 
-### 6. Criar Sessão com Duração Default
+### 7. Criar Sessão com Duração Default
 
 ```http
 POST /api/v1/pautas/{pautaId}/sessoes
@@ -232,7 +265,7 @@ Request opcional:
 }
 ```
 
-Se o body não for enviado, a duração default será `60` segundos.
+Se o body não for enviado, a duração default será o valor configurado em `votacao.duracao-voto`.
 
 Response `201 Created`:
 
@@ -250,37 +283,6 @@ Response `201 Created`:
 Possíveis erros:
 
 - `400 Bad Request`: payload inválido.
-- `404 Not Found`: pauta não encontrada.
-- `409 Conflict`: pauta já possui sessão.
-
-### 7. Criar Sessão com Duração no Path
-
-```http
-POST /api/v1/pautas/{pautaId}/sessoes/{duracaoEmSegundos}
-```
-
-Exemplo:
-
-```http
-POST /api/v1/pautas/1/sessoes/120
-```
-
-Response `201 Created`:
-
-```json
-{
-  "id": 10,
-  "pautaId": 1,
-  "abertaEm": "2026-07-18T10:00:00",
-  "fechaEm": "2026-07-18T10:02:00",
-  "encerradaEm": null,
-  "status": "CRIADA"
-}
-```
-
-Possíveis erros:
-
-- `400 Bad Request`: duração inválida.
 - `404 Not Found`: pauta não encontrada.
 - `409 Conflict`: pauta já possui sessão.
 
@@ -328,7 +330,30 @@ Possíveis erros:
 
 - `404 Not Found`: sessão não encontrada.
 
-### 10. Atualizar Sessão
+### 10. Buscar Sessão por Pauta ID
+
+```http
+GET /api/v1/pautas/{pautaId}/sessoes
+```
+
+Response `200 OK`:
+
+```json
+{
+  "id": 10,
+  "pautaId": 1,
+  "abertaEm": "2026-07-18T10:00:00",
+  "fechaEm": "2026-07-18T10:02:00",
+  "encerradaEm": null,
+  "status": "CRIADA"
+}
+```
+
+Possíveis erros:
+
+- `404 Not Found`: pauta ou sessão não encontrada.
+
+### 11. Atualizar Sessão
 
 ```http
 PUT /api/v1/sessoes/{sessaoId}
@@ -361,7 +386,7 @@ Possíveis erros:
 - `404 Not Found`: sessão não encontrada.
 - `409 Conflict`: sessão não pode mais ser alterada.
 
-### 11. Deletar Sessão
+### 12. Deletar Sessão
 
 ```http
 DELETE /api/v1/sessoes/{sessaoId}
@@ -374,7 +399,7 @@ Possíveis erros:
 - `404 Not Found`: sessão não encontrada.
 - `409 Conflict`: sessão não pode mais ser removida.
 
-### 12. Disponibilizar Sessão para Votação
+### 13. Disponibilizar Sessão para Votação
 
 ```http
 POST /api/v1/sessoes/{sessaoId}/disponibilizar
@@ -398,7 +423,7 @@ Possíveis erros:
 - `404 Not Found`: sessão não encontrada.
 - `409 Conflict`: sessão não está em estado `CRIADA`.
 
-### 13. Forçar Encerramento de Sessão
+### 14. Forçar Encerramento de Sessão
 
 ```http
 POST /api/v1/sessoes/{sessaoId}/encerrar
@@ -422,7 +447,7 @@ Possíveis erros:
 - `404 Not Found`: sessão não encontrada.
 - `422 Unprocessable Entity`: sessão `CRIADA` ainda não pode ser encerrada como votação.
 
-### 14. Registrar Voto
+### 15. Registrar Voto
 
 ```http
 POST /api/v1/pautas/{pautaId}/votos
@@ -469,7 +494,7 @@ Possíveis erros:
 - `422 Unprocessable Entity`: sessão não disponível, encerrada, CPF/CNPJ inválido ou documento inapto.
 - `503 Service Unavailable`: serviço externo de elegibilidade indisponível.
 
-### 15. Consultar Resultado
+### 16. Consultar Resultado
 
 ```http
 GET /api/v1/pautas/{pautaId}/resultado
@@ -504,7 +529,7 @@ Possíveis erros:
 
 - `404 Not Found`: pauta ou sessão não encontrada.
 
-### 16. Finalizar Sessões Vencidas Manualmente
+### 17. Finalizar Sessões Vencidas Manualmente
 
 ```http
 POST /api/v1/sessoes/finalizar
@@ -589,7 +614,7 @@ Exemplo de erro:
 
 - Pautas, sessões e votos persistidos em PostgreSQL.
 - Uma sessão por pauta.
-- Duração de sessão via body, path ou default de `60` segundos.
+- Duração de sessão via body ou default configurável em `votacao.duracao-voto`.
 - Voto apenas enquanto a sessão está `DISPONIVEL` e `agora < fechaEm`.
 - Um voto por documento por pauta, protegido por validação e constraint única.
 - Resultado calculado por agregação no banco.

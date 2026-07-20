@@ -19,7 +19,7 @@ public class KafkaResultadoVotacaoPublisher implements ResultadoVotacaoPublisher
     public KafkaResultadoVotacaoPublisher(
             ObjectProvider<KafkaTemplate<String, Object>> kafkaTemplateProvider,
             @Value("${votacao.kafka.topico-resultado:votacao.resultado.encerrado}") String topic,
-            @Value("${votacao.kafka.habilitado:false}") boolean habilitado
+            @Value("${votacao.kafka.habilitado:true}") boolean habilitado
     ) {
         this.kafkaTemplateProvider = kafkaTemplateProvider;
         this.topic = topic;
