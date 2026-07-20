@@ -174,6 +174,28 @@ class SessaoVotacaoServiceTest {
     }
 
     @Test
+    void deveDisponibilizarSessaoCriadaNoPassadoMantendoDuracaoOriginal() {
+        PautaEntity pauta = pauta(1L);
+        LocalDateTime criadaEm = LocalDateTime.now().minusMinutes(10);
+        SessaoVotacaoEntity sessao = SessaoVotacaoEntity.builder()
+                .id(10L)
+                .pautaEntity(pauta)
+                .abertaEm(criadaEm)
+                .fechaEm(criadaEm.plusSeconds(60))
+                .status(StatusSessaoVotacao.CRIADA)
+                .resultadoPublicado(false)
+                .build();
+        when(sessaoRepository.findById(10L)).thenReturn(Optional.of(sessao));
+        when(sessaoRepository.save(sessao)).thenReturn(sessao);
+
+        SessaoVotacaoResponse response = sessaoService.disponibilizar(10L);
+
+        assertThat(response.status()).isEqualTo(StatusSessaoVotacao.DISPONIVEL);
+        assertThat(response.fechaEm()).isAfter(response.abertaEm());
+        assertThat(response.fechaEm()).isEqualTo(response.abertaEm().plusSeconds(60));
+    }
+
+    @Test
     void deveBloquearDisponibilizacaoQuandoSessaoNaoEstiverCriada() {
         PautaEntity pauta = pauta(1L);
         when(sessaoRepository.findById(10L)).thenReturn(Optional.of(sessao(10L, pauta, StatusSessaoVotacao.ENCERRADA)));
