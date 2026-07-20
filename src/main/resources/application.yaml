@@ -39,6 +39,6 @@ votacao:
     cron: ${VOTACAO_FINALIZACAO_CRON:*/10 * * * * *}
     pool-size: ${VOTACAO_FINALIZACAO_POOL_SIZE:4}
   kafka:
-    habilitado: ${VOTACAO_KAFKA_HABILITADO:false}
+    habilitado: ${VOTACAO_KAFKA_HABILITADO:true}
     topico-resultado: ${VOTACAO_KAFKA_TOPICO_RESULTADO:votacao.resultado.encerrado}
   duracao-voto: ${VOTACAO_DURACAO_VOTO:60}
