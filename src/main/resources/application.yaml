@@ -23,13 +23,13 @@ springdoc:
   swagger-ui:
     enabled: true
     path: /swagger-ui.html
-    operations-sorter: method
+    operations-sorter: alpha
     tags-sorter: alpha
   packages-to-scan: com.global.votacao.adapter.in.web
 
 votacao:
   elegibilidade:
-    habilitada: ${VOTACAO_ELEGIBILIDADE_HABILITADA:false}
+    habilitada: ${VOTACAO_ELEGIBILIDADE_HABILITADA:true}
     base-url: ${CPF_CNPJ_BASE_URL:https://api.cpfcnpj.com.br}
     token: ${CPF_CNPJ_TOKEN:5ae973d7a997af13f0aaf2bf60e65803}
     codigo-cpf: ${CPF_CNPJ_CODIGO_CPF:9}
@@ -41,4 +41,4 @@ votacao:
   kafka:
     habilitado: ${VOTACAO_KAFKA_HABILITADO:false}
     topico-resultado: ${VOTACAO_KAFKA_TOPICO_RESULTADO:votacao.resultado.encerrado}
-
+  duracao-voto: ${VOTACAO_DURACAO_VOTO:60}

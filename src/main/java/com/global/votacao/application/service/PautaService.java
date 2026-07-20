@@ -1,16 +1,21 @@
 package com.global.votacao.application.service;
 
+import com.global.votacao.application.mapper.SessaoMapper;
 import com.global.votacao.domain.model.StatusSessaoVotacao;
 import com.global.votacao.application.dto.AtualizarPautaRequest;
 import com.global.votacao.application.dto.CriarPautaRequest;
 import com.global.votacao.application.dto.PautaResponse;
+import com.global.votacao.application.dto.PautaSessaoAbertaResponse;
+import com.global.votacao.application.dto.SessaoVotacaoResponse;
 import com.global.votacao.domain.entity.PautaEntity;
+import com.global.votacao.domain.entity.SessaoVotacaoEntity;
 import com.global.votacao.infrastructure.persistence.repository.PautaRepository;
 import com.global.votacao.infrastructure.persistence.repository.SessaoVotacaoRepository;
 import com.global.votacao.infrastructure.persistence.repository.VotoRepository;
 import com.global.votacao.application.mapper.PautaMapper;
 import com.global.votacao.shared.exception.ConflitoException;
 import com.global.votacao.shared.exception.RecursoNaoEncontradoException;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
@@ -28,17 +33,18 @@ public class PautaService {
     private final SessaoVotacaoRepository sessaoRepository;
     private final VotoRepository votoRepository;
     private final PautaMapper pautaMapper;
+    private final SessaoMapper sessaoMapper;
 
     @Transactional
     public PautaResponse criar(CriarPautaRequest request) {
         PautaEntity pautaEntity = pautaRepository.save(pautaMapper.toMapperPautaEntity(request));
         log.info("Pauta criada pautaId={}", pautaEntity.getId());
-        return toResponse(pautaEntity);
+        return pautaMapper.toResponse(pautaEntity);
     }
 
     @Transactional(readOnly = true)
     public List<PautaResponse> listar() {
-        return pautaRepository.findAll().stream().map(this::toResponse).toList();
+        return pautaRepository.findAll().stream().map(pautaMapper::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -49,7 +55,17 @@ public class PautaService {
 
     @Transactional(readOnly = true)
     public PautaResponse buscarPorId(Long pautaId) {
-        return toResponse(buscarEntidade(pautaId));
+        return pautaMapper.toResponse(buscarEntidade(pautaId));
+    }
+
+    @Transactional(readOnly = true)
+    public PautaSessaoAbertaResponse buscarComSessaoAberta(Long pautaId) {
+        PautaEntity pautaEntity = buscarEntidade(pautaId);
+        SessaoVotacaoEntity sessao = sessaoRepository.findByPautaEntityId(
+                        pautaId
+                )
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão aberta não encontrada para a pauta " + pautaId));
+        return new PautaSessaoAbertaResponse(pautaMapper.toResponse(pautaEntity), sessaoMapper.toSessaoResponse(sessao));
     }
 
     @Transactional
@@ -58,7 +74,7 @@ public class PautaService {
         PautaEntity pautaEntity = buscarEntidade(pautaId);
         pautaEntity.setTitulo(request.titulo());
         pautaEntity.setDescricao(request.descricao());
-        return toResponse(pautaRepository.save(pautaEntity));
+        return pautaMapper.toResponse(pautaRepository.save(pautaEntity));
     }
 
     @Transactional
@@ -84,14 +100,6 @@ public class PautaService {
         }
     }
 
-    PautaResponse toResponse(PautaEntity pautaEntity) {
-        PautaResponse pautaResponse = new PautaResponse();
-        pautaResponse.setId(pautaEntity.getId());
-        pautaResponse.setTitulo(pautaEntity.getTitulo());
-        pautaResponse.setDescricao(pautaEntity.getDescricao());
-        pautaResponse.setCriadaEm(pautaEntity.getCriadaEm());
-        return pautaResponse;
-    }
 }
 
 

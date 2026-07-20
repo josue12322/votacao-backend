@@ -4,6 +4,7 @@ import com.global.votacao.application.config.FinalizacaoProperties;
 import com.global.votacao.application.dto.ResultadoVotacaoResponse;
 import com.global.votacao.application.dto.SessaoVotacaoResponse;
 import com.global.votacao.application.event.ResultadoVotacaoEvento;
+import com.global.votacao.application.mapper.SessaoMapper;
 import com.global.votacao.application.port.out.ResultadoVotacaoPublisher;
 import com.global.votacao.domain.entity.SessaoVotacaoEntity;
 import com.global.votacao.domain.model.StatusSessaoVotacao;
@@ -38,13 +39,14 @@ public class FinalizacaoSessaoService {
     private final ResultadoVotacaoPublisher publisher;
     private final FinalizacaoProperties properties;
     private final TransactionTemplate transactionTemplate;
+    private final SessaoMapper sessaoMapper;
 
 
     public int finalizarPendentes() {
-        LocalDateTime agora = LocalDateTime.now();
+        LocalDateTime dtAtual = LocalDateTime.now();
         List<SessaoVotacaoEntity> sessoesDisponiveisVencidas = sessaoRepository.findByStatusAndFechaEmLessThanEqualOrderByFechaEmAsc(
                 StatusSessaoVotacao.DISPONIVEL,
-                agora,
+                dtAtual,
                 PageRequest.of(0, LIMITE_CONSULTA_BATCH)
         );
         List<SessaoVotacaoEntity> sessoesEncerradasNaoPublicadas = sessaoRepository.findByStatusAndResultadoPublicadoFalseOrderByFechaEmAsc(
@@ -59,7 +61,7 @@ public class FinalizacaoSessaoService {
                 .map(SessaoVotacaoEntity::getId)
                 .toList();
 
-        int processadas = finalizarSessoes(sessoesIds, agora);
+        int processadas = finalizarSessoes(sessoesIds, dtAtual);
 
         log.info(
                 "Finalizações de sessões concluidas sessoesDisponiveisVencidas={} sessoesEncerradasNaoPublicadas={} poolSize={} limiteConsultaBatch={} sessoesProcessadas={}",
@@ -72,7 +74,7 @@ public class FinalizacaoSessaoService {
         return processadas;
     }
 
-    private int finalizarSessoes(List<Long> sessoesIds, LocalDateTime agora) {
+    private int finalizarSessoes(List<Long> sessoesIds, LocalDateTime dtAtual) {
         if (sessoesIds.isEmpty()) {
             return 0;
         }
@@ -80,7 +82,7 @@ public class FinalizacaoSessaoService {
         ExecutorService executorService = Executors.newFixedThreadPool(properties.poolSize());
         try {
             List<Callable<Boolean>> tarefas = sessoesIds.stream()
-                    .map(sessaoId -> (Callable<Boolean>) () -> finalizarUmaSessaoEmTransacao(sessaoId, agora))
+                    .map(sessaoId -> (Callable<Boolean>) () -> finalizarUmaSessaoEmTransacao(sessaoId, dtAtual))
                     .toList();
             int processadas = 0;
             for (Future<Boolean> resultado : executorService.invokeAll(tarefas)) {
@@ -101,20 +103,20 @@ public class FinalizacaoSessaoService {
             executorService.shutdown();
         }
     }
-    private boolean finalizarUmaSessaoEmTransacao(Long sessaoId, LocalDateTime agora) {
-        Boolean finalizada = transactionTemplate.execute(status -> finalizarUmaSessao(sessaoId, agora));
+    private boolean finalizarUmaSessaoEmTransacao(Long sessaoId, LocalDateTime dtAtual) {
+        Boolean finalizada = transactionTemplate.execute(status -> finalizarUmaSessao(sessaoId, dtAtual));
         return Boolean.TRUE.equals(finalizada);
     }
-    boolean finalizarUmaSessao(Long sessaoId, LocalDateTime agora) {
+    boolean finalizarUmaSessao(Long sessaoId, LocalDateTime dtAtual) {
         SessaoVotacaoEntity sessao = sessaoRepository.findById(sessaoId).orElse(null);
         if (sessao == null || sessao.getStatus() == StatusSessaoVotacao.PUBLICADA || sessao.isResultadoPublicado()) {
             return false;
         }
-        if (sessao.getStatus() == StatusSessaoVotacao.DISPONIVEL && !sessao.estaVencida(agora)) {
+        if (sessao.getStatus() == StatusSessaoVotacao.DISPONIVEL && !sessao.estaVencida(dtAtual)) {
             return false;
         }
         if (sessao.getStatus() == StatusSessaoVotacao.DISPONIVEL) {
-            sessao.encerrar(agora);
+            sessao.encerrar(dtAtual);
             sessaoRepository.save(sessao);
         } else if (sessao.getStatus() != StatusSessaoVotacao.ENCERRADA) {
             return false;
@@ -140,22 +142,22 @@ public class FinalizacaoSessaoService {
     @Transactional
     public SessaoVotacaoResponse encerrarForcado(Long sessaoId) {
         SessaoVotacaoEntity sessao = sessaoRepository.findById(sessaoId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("SessÃ£o nÃ£o encontrada para o id " + sessaoId));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão não encontrada para o id " + sessaoId));
         if (sessao.getStatus() == StatusSessaoVotacao.CRIADA) {
-            throw new RegraNegocioException("SessÃ£o criada e ainda nÃ£o disponibilizada nÃ£o pode ser encerrada como votaÃ§Ã£o");
+            throw new RegraNegocioException("Sessão não e ainda não disponibilizada não pode ser encerrada como votação");
         }
         finalizarUmaSessaoForcada(sessao, LocalDateTime.now());
         SessaoVotacaoEntity atualizada = sessaoRepository.findById(sessaoId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("SessÃ£o nÃ£o encontrada para o id " + sessaoId));
-        return toResponse(atualizada);
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão não encontrada para o id " + sessaoId));
+        return sessaoMapper.toSessaoResponse(atualizada);
     }
 
-    private void finalizarUmaSessaoForcada(SessaoVotacaoEntity sessao, LocalDateTime agora) {
+    private void finalizarUmaSessaoForcada(SessaoVotacaoEntity sessao, LocalDateTime dtAtual) {
         if (sessao.getStatus() == StatusSessaoVotacao.PUBLICADA || sessao.isResultadoPublicado()) {
             return;
         }
         if (sessao.getStatus() == StatusSessaoVotacao.DISPONIVEL) {
-            sessao.encerrar(agora);
+            sessao.encerrar(dtAtual);
             sessaoRepository.save(sessao);
         }
         if (sessao.getStatus() == StatusSessaoVotacao.ENCERRADA) {

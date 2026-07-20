@@ -1,5 +1,6 @@
 package com.global.votacao.application.mapper;
 
+import com.global.votacao.application.dto.SessaoVotacaoResponse;
 import com.global.votacao.domain.model.StatusSessaoVotacao;
 import com.global.votacao.domain.entity.PautaEntity;
 import com.global.votacao.domain.entity.SessaoVotacaoEntity;
@@ -26,6 +27,19 @@ public class SessaoMapper {
                 .status(StatusSessaoVotacao.PUBLICADA)
                 .build();
     }
+
+    public SessaoVotacaoResponse toSessaoResponse(SessaoVotacaoEntity sessao) {
+        return new SessaoVotacaoResponse(
+                sessao.getId(),
+                sessao.getPautaEntity().getId(),
+                sessao.getAbertaEm(),
+                sessao.getFechaEm(),
+                sessao.getEncerradaEm(),
+                sessao.getStatus()
+        );
+    }
+
+
 
 //    new SessaoVotacaoEntity(pautaEntity, abertaEm, abertaEm.plusSeconds(duracaoEmSegundos)
 }

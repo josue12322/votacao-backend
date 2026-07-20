@@ -36,9 +36,9 @@ public class VotoService {
     public VotoResponse registrar(Long pautaId, RegistrarVotoRequest request) {
         PautaEntity pautaEntity = pautaService.buscarEntidade(pautaId);
         SessaoVotacaoEntity sessao = sessaoRepository.findByPautaEntityId(pautaId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("SessÃ£o nÃ£o encontrada para a pauta " + pautaId));
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Sessão não encontrada para a pauta " + pautaId));
         if (!sessao.aceitaVoto(LocalDateTime.now())) {
-            log.info("Voto recusado porque sessão não está¡ Disponivél pautaId={} documento={}", pautaId, request.documento());
+            log.info("Voto recusado porque sessão não está Disponivél pautaId={} documento={}", pautaId, request.documento());
             throw new RegraNegocioException("Sessão de votação não está disponivél para receber votos");
         }
 
@@ -47,7 +47,7 @@ public class VotoService {
 
         if (votoRepository.existsByPautaEntityIdAndDocumento(pautaId, documento)) {
             log.info("Voto duplicado recusado pautaId={} documento={}", pautaId, documento);
-            throw new ConflitoException("Documento jÃ¡ votou nesta pauta");
+            throw new ConflitoException("usuario já votou nesta pauta");
         }
 
         try {
@@ -55,7 +55,7 @@ public class VotoService {
             log.info("Voto registrado pautaId={} documento={}", pautaId, documento);
             return mapper.toMapperVotoResponse(voto);
         } catch (DataIntegrityViolationException exception) {
-            throw new ConflitoException("Documento jÃ¡ votou nesta pauta");
+            throw new ConflitoException("usuario já votou nesta pauta");
         }
     }
 

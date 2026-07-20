@@ -12,6 +12,7 @@ public interface SessaoVotacaoRepository extends JpaRepository<SessaoVotacaoEnti
 
     Optional<SessaoVotacaoEntity> findByPautaEntityId(Long pautaId);
 
+
     boolean existsByPautaEntityId(Long pautaId);
 
     boolean existsByPautaEntityIdAndStatusIn(Long pautaId, List<StatusSessaoVotacao> status);
