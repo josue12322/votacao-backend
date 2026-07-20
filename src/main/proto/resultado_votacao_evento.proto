@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package com.global.votacao.kafka;
+
+option java_multiple_files = true;
+option java_package = "com.global.votacao.kafka";
+option java_outer_classname = "ResultadoVotacaoEventoProto";
+
+message ResultadoVotacaoEventoMessage {
+  int64 id = 1;
+  string titulo = 2;
+  string descricao = 3;
+  ResultadoVotacaoMessage pauta = 4;
+}
+
+message ResultadoVotacaoMessage {
+  int64 pauta_id = 1;
+  int64 votos_sim = 2;
+  int64 votos_nao = 3;
+  int64 total_votos = 4;
+  StatusResultado status = 5;
+  VencedorVotacao vencedor = 6;
+}
+
+enum StatusResultado {
+  STATUS_RESULTADO_UNSPECIFIED = 0;
+  SEM_SESSAO = 1;
+  SESSAO_ABERTA = 2;
+  SESSAO_ENCERRADA = 3;
+}
+
+enum VencedorVotacao {
+  VENCEDOR_VOTACAO_UNSPECIFIED = 0;
+  SIM = 1;
+  NAO = 2;
+  EMPATE = 3;
+}
