@@ -26,11 +26,6 @@ public class SessaoVotacaoController implements ISessaoVotacaoController {
     }
 
     @Override
-    public ResponseEntity<SessaoVotacaoResponse> criarComDuracao(Long pautaId, Integer duracaoEmSegundos) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(sessaoService.criar(pautaId, duracaoEmSegundos));
-    }
-
-    @Override
     public ResponseEntity<List<SessaoVotacaoResponse>> listar() {
         return ResponseEntity.ok(sessaoService.listar());
     }

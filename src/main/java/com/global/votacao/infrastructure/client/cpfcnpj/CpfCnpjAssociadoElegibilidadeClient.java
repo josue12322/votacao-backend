@@ -5,69 +5,82 @@ import com.global.votacao.domain.model.TipoDocumento;
 import com.global.votacao.shared.exception.DependenciaExternaException;
 import com.global.votacao.shared.exception.RegraNegocioException;
 import feign.FeignException;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class CpfCnpjAssociadoElegibilidadeClient implements AssociadoElegibilidadeClient {
 
     private static final Logger log = LoggerFactory.getLogger(CpfCnpjAssociadoElegibilidadeClient.class);
 
     private final AssociadoElegibilidadeProperties properties;
     private final CpfCnpjFeignClient cpfCnpjFeignClient;
-
-    public CpfCnpjAssociadoElegibilidadeClient(
-            AssociadoElegibilidadeProperties properties,
-            CpfCnpjFeignClient cpfCnpjFeignClient
-    ) {
-        this.properties = properties;
-        this.cpfCnpjFeignClient = cpfCnpjFeignClient;
-    }
+    private final CpfCnpjErrorHandler errorHandler;
 
     @Override
     public void validarElegibilidade(String documento, TipoDocumento tipoDocumento) {
         if (!properties.habilitada()) {
             return;
         }
-        if (tipoDocumento == null) {
-            throw new RegraNegocioException("Tipo do documento Ã© obrigatÃ³rio para validaÃ§Ã£o de elegibilidade");
-        }
 
+        validarTipoDocumento(tipoDocumento);
         String documentoNormalizado = normalizarDocumento(documento);
         validarFormatoDocumento(documentoNormalizado, tipoDocumento);
-        Integer codigoConsulta = codigoConsulta(tipoDocumento);
 
         try {
             CpfCnpjResponse response = cpfCnpjFeignClient.consultarDocumento(
                     properties.token(),
-                    codigoConsulta,
+                    codigoConsulta(tipoDocumento),
                     documentoNormalizado
             );
-            if (response == null || response.status() != 1) {
-                String mensagem = response == null ? tipoDocumento + " invÃ¡lido" : response.mensagemErro(tipoDocumento);
-                throw new RegraNegocioException(mensagem);
-            }
+            validarResponse(response, tipoDocumento);
+        } catch (FeignException.BadRequest exception) {
+            throw errorHandler.documentoInvalido(exception, tipoDocumento, documentoNormalizado);
+        } catch (FeignException.NotFound exception) {
+            throw new RegraNegocioException(tipoDocumento + " inválido");
         } catch (FeignException exception) {
-            log.warn("Falha HTTP ao validar {} mascarado {}", tipoDocumento, mascararDocumento(documentoNormalizado), exception);
-            throw new DependenciaExternaException("ServiÃ§o externo de validaÃ§Ã£o de documento indisponÃ­vel", exception);
+            throw erroDependenciaExterna(tipoDocumento, documentoNormalizado, exception);
         } catch (RegraNegocioException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            log.warn("Falha ao validar {} mascarado {}", tipoDocumento, mascararDocumento(documentoNormalizado), exception);
-            throw new DependenciaExternaException("ServiÃ§o externo de validaÃ§Ã£o de documento indisponÃ­vel", exception);
+            throw erroDependenciaExterna(tipoDocumento, documentoNormalizado, exception);
         }
+    }
+
+    private void validarTipoDocumento(TipoDocumento tipoDocumento) {
+        if (tipoDocumento == null) {
+            throw new RegraNegocioException("Tipo do documento é obrigatório para validação de elegibilidade");
+        }
+    }
+
+    private void validarResponse(CpfCnpjResponse response, TipoDocumento tipoDocumento) {
+        if (response == null || response.getStatus() == null || response.getStatus() != 1) {
+            String mensagem = response == null ? tipoDocumento + " inválido" : response.mensagemErro(tipoDocumento);
+            throw new RegraNegocioException(mensagem);
+        }
+    }
+
+    private DependenciaExternaException erroDependenciaExterna(
+            TipoDocumento tipoDocumento,
+            String documentoNormalizado,
+            RuntimeException exception
+    ) {
+        log.warn("Falha ao validar {} mascarado {}", tipoDocumento, mascararDocumento(documentoNormalizado), exception);
+        return new DependenciaExternaException("Serviço externo de validação de documento indisponível", exception);
     }
 
     private void validarFormatoDocumento(String documento, TipoDocumento tipoDocumento) {
         if (documento.isBlank()) {
-            throw new RegraNegocioException(tipoDocumento + " Ã© obrigatÃ³rio para validaÃ§Ã£o de elegibilidade");
+            throw new RegraNegocioException(tipoDocumento + " é obrigatório para validação de elegibilidade");
         }
         if (tipoDocumento == TipoDocumento.CPF && documento.length() != 11) {
-            throw new RegraNegocioException("CPF deve conter 11 dÃ­gitos");
+            throw new RegraNegocioException("CPF deve conter 11 dígitos");
         }
         if (tipoDocumento == TipoDocumento.CNPJ && documento.length() != 14) {
-            throw new RegraNegocioException("CNPJ deve conter 14 dÃ­gitos");
+            throw new RegraNegocioException("CNPJ deve conter 14 dígitos");
         }
     }
 
@@ -89,6 +102,3 @@ public class CpfCnpjAssociadoElegibilidadeClient implements AssociadoElegibilida
         return "***" + documento.substring(documento.length() - 4);
     }
 }
-
-
-

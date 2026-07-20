@@ -4,6 +4,7 @@ import com.global.votacao.adapter.in.web.api.IPautaController;
 import com.global.votacao.application.dto.AtualizarPautaRequest;
 import com.global.votacao.application.dto.CriarPautaRequest;
 import com.global.votacao.application.dto.PautaResponse;
+import com.global.votacao.application.dto.PautaSessaoAbertaResponse;
 import com.global.votacao.application.service.PautaService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,11 @@ public class PautaController implements IPautaController {
     @Override
     public ResponseEntity<PautaResponse> buscarPorId(Long pautaId) {
         return ResponseEntity.ok(pautaService.buscarPorId(pautaId));
+    }
+
+    @Override
+    public ResponseEntity<PautaSessaoAbertaResponse> buscarComSessaoAberta(Long pautaId) {
+        return ResponseEntity.ok(pautaService.buscarComSessaoAberta(pautaId));
     }
 
     @Override
